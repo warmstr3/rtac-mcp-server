@@ -101,6 +101,48 @@ def message_to_dict(m):
     return d
 
 
+def find_device_object(project):
+    for child in project.get_children(False):
+        if hasattr(child, "set_simulation_mode"):
+            return child
+    raise RuntimeError("No device object supporting simulation mode")
+
+
+def run_in_simulation(project, app, task, run):
+    """Download to the CODESYS simulator, run until done_var is TRUE, read values."""
+    import time
+    out = {"values": {}, "timed_out": False}
+    find_device_object(project).set_simulation_mode(True)
+    onlineapp = se.online.create_online_application(app)
+    try:
+        onlineapp.login(se.OnlineChangeOption.Never, True)
+        onlineapp.start()
+        deadline = time.time() + run.get("timeout_s", 120)
+        while True:
+            done = unicode(onlineapp.read_value(run["done_var"]))
+            if done.upper() == "TRUE":
+                break
+            if time.time() > deadline:
+                out["timed_out"] = True
+                break
+            time.sleep(0.2)
+        for var in run.get("read_vars", []):
+            try:
+                out["values"][var] = unicode(onlineapp.read_value(var))
+            except Exception as e:
+                out["values"][var] = "<read failed: %s>" % e
+        try:
+            onlineapp.stop()
+        except Exception:
+            pass
+    finally:
+        try:
+            onlineapp.logout()
+        except Exception:
+            pass
+    return out
+
+
 try:
     target = job["project_path"]
     if os.path.exists(target):
@@ -164,6 +206,11 @@ try:
             d = message_to_dict(m)
             d["category"] = desc
             result["messages"].append(d)
+
+    run = job.get("run")
+    build_errors = [m for m in result["messages"] if m.get("severity") == "Error" and m.get("category") == "Build"]
+    if run and not build_errors and not result["create_errors"]:
+        result["run"] = run_in_simulation(project, app, task, run)
 
     project.save()
     project.close()

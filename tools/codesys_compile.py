@@ -50,7 +50,7 @@ def _user_objects(export_dir):
     return objs
 
 
-def build_job(export_dir, work_dir):
+def build_job(export_dir, work_dir, extra_objects=(), extra_programs=(), only_programs=None):
     user = _user_objects(export_dir)
     user_names = {o["name"].lower() for o in user}
     stubs = [o for o in sel_stubs.library_objects() if o["name"].lower() not in user_names]
@@ -68,6 +68,11 @@ def build_job(export_dir, work_dir):
         stubs.append({"kind": "pou", "name": HARNESS, "pou_type": "Program",
                       "decl": "PROGRAM %s\nVAR\n%sEND_VAR\n" % (HARNESS, decls), "impl": ""})
         programs.append(HARNESS)
+    programs += list(extra_programs)
+    if only_programs is not None:
+        # Test runs: the runner alone drives the logic, so nothing else in the
+        # task executes the target a second time or overwrites its inputs.
+        programs = list(only_programs)
 
     job = {
         "project_path": os.path.join(work_dir, "rtac_check.project"),
@@ -75,7 +80,7 @@ def build_job(export_dir, work_dir):
         "device_name": CODESYS_DEVICE,
         # RTAC logic uses IEC timers/triggers/bistables (TON, R_TRIG, RS ...).
         "libraries": [STANDARD_LIBRARY],
-        "objects": user + stubs,
+        "objects": user + stubs + list(extra_objects),
         "task_programs": programs,
     }
     return job, user_names, unknown_types
@@ -101,17 +106,25 @@ def _run_codesys(job, work_dir, timeout):
         return json.load(f)
 
 
-def compile_export(export_dir, timeout=900):
+def run_export(export_dir, extra_objects=(), extra_programs=(), run=None, timeout=900, only_programs=None):
+    """
+    Build the export (plus any extra generated objects) in CODESYS and,
+    if `run` is given and the build is clean, execute it in simulation.
+    Returns (result, raw) where result is the compile summary.
+    """
     export_dir = os.path.abspath(export_dir)
-    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     work_dir = os.path.join(WORK_ROOT, stamp)
     os.makedirs(work_dir, exist_ok=True)
 
-    job, user_names, unknown_types = build_job(export_dir, work_dir)
+    job, user_names, unknown_types = build_job(export_dir, work_dir, extra_objects, extra_programs, only_programs)
+    if run:
+        job["run"] = run
     raw = _run_codesys(job, work_dir, timeout)
     if raw.get("fatal"):
-        return {"ok": False, "error": "CODESYS script failed", "detail": raw["fatal"], "work_dir": work_dir}
+        return {"ok": False, "error": "CODESYS script failed", "detail": raw["fatal"], "work_dir": work_dir}, raw
 
+    generated = {o["name"].lower() for o in extra_objects}
     issues = []
     for m in raw["messages"]:
         if m.get("severity") not in ("Error", "Warning") or m.get("category") != "Build":
@@ -121,7 +134,8 @@ def compile_export(export_dir, timeout=900):
         obj = m.get("object")
         if obj:
             issue["object"] = obj
-            issue["source"] = "user" if obj.lower() in user_names else "stub"
+            issue["source"] = ("user" if obj.lower() in user_names
+                               else "test" if obj.lower() in generated else "stub")
         pos = _POSITION.search(m.get("position_text") or "")
         if pos:
             issue["line"], issue["column"] = int(pos.group(1)), int(pos.group(2))
@@ -143,4 +157,8 @@ def compile_export(export_dir, timeout=900):
         result["create_errors"] = raw["create_errors"]
     if unknown_types:
         result["unstubbed_tag_types"] = unknown_types
-    return result
+    return result, raw
+
+
+def compile_export(export_dir, timeout=900):
+    return run_export(export_dir, timeout=timeout)[0]

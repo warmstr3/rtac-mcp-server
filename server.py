@@ -11,7 +11,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from tools import acrtac, rtac_xml, codesys_compile
+from tools import acrtac, rtac_xml, codesys_compile, unit_tests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("rtac-mcp")
@@ -175,6 +175,55 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema={"type": "object", "properties": {"export_dir": EXPORT_DIR}, "required": ["export_dir"]},
         ),
+        Tool(
+            name="run_unit_tests",
+            description=(
+                "Unit-test one POU (FunctionBlock, Program or Function) from an export by running it in "
+                "the CODESYS simulator. Each case is a list of steps; a step sets inputs, runs the target "
+                "for `cycles` and/or `hold_ms` of real time, then checks `expect` values. Returns pass/fail "
+                "per check with actual values. Names declared by the target (e.g. 'Enable', "
+                "'IID_com_delay.Q') refer to the target instance; other names are globals or device tags "
+                "written as-is (e.g. 'Greensmith_DNP.ISLAND_ENABLED.stVal'). For Functions, use 'return' "
+                "or 'return.<field>'. Values: true/false, numbers (compared within tolerance), or strings "
+                "holding raw Structured Text ('T#5S', 'dt_State.Idle', \"'text'\"). Each FunctionBlock "
+                "case gets a fresh instance; Program state carries over between cases. Only the target "
+                "runs (other programs don't), so set anything they would provide as inputs. Simulator "
+                "cycles are ~20 ms: use hold_ms for timer tests. Pass `suite_file` instead of "
+                "target/cases to run suites saved as JSON. Takes ~45-90 s per suite."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "export_dir": EXPORT_DIR,
+                    "target": {"type": "string", "description": "POU to test"},
+                    "cases": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "steps": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "inputs": {"type": "object"},
+                                            "cycles": {"type": "integer", "minimum": 1},
+                                            "hold_ms": {"type": "number", "minimum": 0},
+                                            "expect": {"type": "object"},
+                                        },
+                                    },
+                                },
+                            },
+                            "required": ["steps"],
+                        },
+                    },
+                    "tolerance": {"type": "number", "description": "Numeric comparison tolerance (default 1e-4)"},
+                    "suite_file": {"type": "string", "description": "JSON file with {target, cases} or a list of them"},
+                },
+                "required": ["export_dir"],
+            },
+        ),
     ]
 
 
@@ -210,6 +259,12 @@ def _dispatch(name, a):
         return {k: v for k, v in sorted(rtac_xml.list_tags(a["export_dir"]).items()) if k.startswith(prefix)}
     if name == "compile_logic":
         return codesys_compile.compile_export(a["export_dir"])
+    if name == "run_unit_tests":
+        if a.get("suite_file"):
+            return unit_tests.run_suite_file(a["export_dir"], a["suite_file"])
+        if not a.get("target") or not a.get("cases"):
+            raise ValueError("Pass either suite_file, or target and cases")
+        return unit_tests.run_unit_tests(a["export_dir"], a["target"], a["cases"], a.get("tolerance", 1e-4))
     return {"error": f"Unknown tool: {name}"}
 
 
