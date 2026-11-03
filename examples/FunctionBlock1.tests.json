@@ -1,0 +1,64 @@
+{
+  "target": "FunctionBlock1",
+  "tolerance": 0.001,
+  "cases": [
+    {
+      "name": "request within limit passes through",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 50.0, "MaxAllowed_kW": 80.0, "Enable": true, "CommsHealthy": true},
+          "expect": {"Limited_kW": 50.0, "LimitActive": false, "Blocked": false}
+        }
+      ]
+    },
+    {
+      "name": "request over limit is clamped",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 100.0, "MaxAllowed_kW": 80.0, "Enable": true, "CommsHealthy": true},
+          "expect": {"Limited_kW": 80.0, "LimitActive": true, "Blocked": false}
+        }
+      ]
+    },
+    {
+      "name": "disabled blocks output",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 100.0, "MaxAllowed_kW": 80.0, "Enable": false, "CommsHealthy": true},
+          "expect": {"Limited_kW": 0.0, "LimitActive": false, "Blocked": true}
+        }
+      ]
+    },
+    {
+      "name": "comms loss blocks output",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 100.0, "MaxAllowed_kW": 80.0, "Enable": true, "CommsHealthy": false},
+          "expect": {"Limited_kW": 0.0, "Blocked": true}
+        }
+      ]
+    },
+    {
+      "name": "negative request floors at zero",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": -10.0, "MaxAllowed_kW": 80.0, "Enable": true, "CommsHealthy": true},
+          "expect": {"Limited_kW": 0.0, "LimitActive": false, "Blocked": false}
+        }
+      ]
+    },
+    {
+      "name": "recovers when re-enabled",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 60.0, "MaxAllowed_kW": 80.0, "Enable": false, "CommsHealthy": true},
+          "expect": {"Blocked": true}
+        },
+        {
+          "inputs": {"Enable": true},
+          "expect": {"Limited_kW": 60.0, "Blocked": false}
+        }
+      ]
+    }
+  ]
+}

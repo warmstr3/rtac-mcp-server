@@ -21,6 +21,36 @@ The stubs are approximations of the SEL library. An error tagged `"source": "stu
 
 Every user FB is instantiated in a generated harness program, so new FBs are checked even before anything calls them. RTAC itself skips unreferenced POUs.
 
+## Unit tests
+
+`run_unit_tests` builds the export the same way as `compile_logic`, adds a generated runner program, downloads it to the CODESYS simulator and reads the results back. The runner steps through every case inside the PLC: set inputs, call the target for a number of cycles or a real-time hold, then compare the outputs against expected values.
+
+```json
+{
+  "target": "FunctionBlock1",
+  "cases": [
+    {
+      "name": "request over limit is clamped",
+      "steps": [
+        {
+          "inputs": {"Requested_kW": 100.0, "MaxAllowed_kW": 80.0, "Enable": true, "CommsHealthy": true},
+          "expect": {"Limited_kW": 80.0, "LimitActive": true}
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **Targets:** FunctionBlocks (a fresh instance per case), Programs (one instance, so state carries over between cases) and Functions (`return` / `return.<field>`).
+- **Names:** a name whose first segment the target declares (`Enable`, `IID_com_delay.Q`) refers to the target instance. Anything else is a global or device tag, written as-is (`gv_SysIslanded`, `IID_CFG_MuGrdInputs_GRX_POU.Offline`).
+- **Values:** `true`/`false`, numbers (compared within `tolerance`), or strings containing raw Structured Text (`"T#5S"`, `"validity_t.good"`, `"'text'"`).
+- **Timing:** the simulator runs at about 20 ms per cycle, regardless of the configured task interval. Use `hold_ms` for timer behaviour, since it measures real time with `TIME()`, and leave a margin around timer presets.
+- **Isolation:** only the runner is scheduled. Other programs don't run, so anything they would normally write (globals, device tags) has to be set as a test input.
+- **Results:** pass/fail for every check, with the actual value. Errors in the test definition itself (a typo'd name, a wrong type) come back as compile errors with `"source": "test"`.
+
+Suites can be saved as JSON (one `{target, cases}` object or a list of them) and run with `suite_file`; see [examples/FunctionBlock1.tests.json](examples/FunctionBlock1.tests.json).
+
 ## Tools
 
 | Tool | What it does |
@@ -35,6 +65,7 @@ Every user FB is instantiated in a generated harness program, so new FBs are che
 | `list_tasks` / `assign_program_to_task` | Task configuration (`System/Main Controller.xml`) |
 | `list_device_tags` | Device and tag-list tags with SEL types |
 | `compile_logic` | Type-check all user logic through CODESYS |
+| `run_unit_tests` | Run test cases against one POU in the CODESYS simulator and report pass/fail |
 
 The export/edit/compile tools work on a folder and don't need AcSELerator running. Only the `rtac_*` tools touch the AcRTAC database.
 
