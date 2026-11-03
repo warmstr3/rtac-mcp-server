@@ -101,8 +101,15 @@ class _Target:
         return key
 
 
-def build_runner(target, cases, tolerance):
-    """Generate the runner program. Returns (pou object, checks metadata)."""
+def build_runner(target, cases, tolerance, each_cycle=None):
+    """
+    Generate the runner program. Returns (pou object, checks metadata).
+
+    `each_cycle` is a list of raw ST statements run every cycle just before
+    the target, e.g. to call global timers that another program normally
+    calls ("gv_X_10S(IN := gv_X, PT := T#10S);").
+    """
+    pre = ["\t\t" + st.strip().rstrip(";") + ";" for st in (each_cycle or []) if st.strip()]
     if not cases:
         raise ValueError("No test cases given")
     decls, body, checks = [], [], []
@@ -142,7 +149,7 @@ def build_runner(target, cases, tolerance):
             if hold_ms:
                 lines.append("\t\tIF _cyc = 0 THEN _t0 := TIME(); END_IF")
                 cond += " AND TIME() - _t0 >= T#%dMS" % hold_ms
-            lines += [call, "\t\t_cyc := _cyc + 1;", "\t\tIF %s THEN" % cond]
+            lines += pre + [call, "\t\t_cyc := _cyc + 1;", "\t\tIF %s THEN" % cond]
             for key, expected in step.get("expect", {}).items():
                 checks.append({"case": name, "step": si, "name": key, "expected": expected})
                 n = len(checks)
@@ -192,7 +199,8 @@ def run_suite_file(export_dir, suite_file):
         suites = json.load(f)
     if isinstance(suites, dict):
         suites = [suites]
-    results = [run_unit_tests(export_dir, s["target"], s["cases"], s.get("tolerance", 1e-4))
+    results = [run_unit_tests(export_dir, s["target"], s["cases"], s.get("tolerance", 1e-4),
+                              each_cycle=s.get("each_cycle"))
                for s in suites]
     return {
         "ok": all(r.get("ok") for r in results),
@@ -202,12 +210,12 @@ def run_suite_file(export_dir, suite_file):
     }
 
 
-def run_unit_tests(export_dir, target, cases, tolerance=1e-4, timeout_s=None):
+def run_unit_tests(export_dir, target, cases, tolerance=1e-4, timeout_s=None, each_cycle=None):
     obj = rtac_xml.find_object(export_dir, target)
     if obj["kind"] != "POU":
         raise ValueError("'%s' is a %s; tests target a FunctionBlock, Program or Function" % (target, obj["kind"]))
     t = _Target(obj)
-    runner, checks = build_runner(t, cases, tolerance)
+    runner, checks = build_runner(t, cases, tolerance, each_cycle)
 
     total_ms = sum(int(x) * SIM_CYCLE_MS for x in re.findall(r"_cyc >= (\d+)", runner["impl"]))
     total_ms += sum(int(x) for x in re.findall(r"T#(\d+)MS THEN", runner["impl"]))

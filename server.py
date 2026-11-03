@@ -189,7 +189,9 @@ async def list_tools() -> list[Tool]:
                 "case gets a fresh instance; Program state carries over between cases. Only the target "
                 "runs (other programs don't), so set anything they would provide as inputs. Simulator "
                 "cycles are ~20 ms: use hold_ms for timer tests. Pass `suite_file` instead of "
-                "target/cases to run suites saved as JSON. Takes ~45-90 s per suite."
+                "target/cases to run suites saved as JSON. `each_cycle` (also a suite-file key) is raw "
+                "ST run every cycle before the target, for FB calls the target relies on but another "
+                "program normally makes (e.g. global timers). Takes ~45-90 s per suite."
             ),
             inputSchema={
                 "type": "object",
@@ -219,7 +221,10 @@ async def list_tools() -> list[Tool]:
                         },
                     },
                     "tolerance": {"type": "number", "description": "Numeric comparison tolerance (default 1e-4)"},
-                    "suite_file": {"type": "string", "description": "JSON file with {target, cases} or a list of them"},
+                    "suite_file": {"type": "string", "description": "JSON file with {target, cases, each_cycle?} or a list of them"},
+                    "each_cycle": {"type": "array", "items": {"type": "string"},
+                                   "description": "ST statements run every cycle before the target, e.g. "
+                                                  "'gv_UtilitySourceOK_10S(IN := gv_UtilitySourceOK, PT := T#10S)'"},
                 },
                 "required": ["export_dir"],
             },
@@ -264,7 +269,8 @@ def _dispatch(name, a):
             return unit_tests.run_suite_file(a["export_dir"], a["suite_file"])
         if not a.get("target") or not a.get("cases"):
             raise ValueError("Pass either suite_file, or target and cases")
-        return unit_tests.run_unit_tests(a["export_dir"], a["target"], a["cases"], a.get("tolerance", 1e-4))
+        return unit_tests.run_unit_tests(a["export_dir"], a["target"], a["cases"], a.get("tolerance", 1e-4),
+                                         each_cycle=a.get("each_cycle"))
     return {"error": f"Unknown tool: {name}"}
 
 
