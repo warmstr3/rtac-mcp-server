@@ -311,7 +311,9 @@ def check_tag_processor(export_dir):
                                message="Control statement row '%s': verify the Tag Processor accepts it; "
                                        "destinations inside IF/ELSE branches count as duplicates" % src.strip()))
             continue
-        if not dest or dest.startswith("//"):
+        if not dest or dest.startswith("//") or not src.strip():
+            # Declaration-only rows (no source) may repeat, e.g. SystemTags.*;
+            # AcSELerator only rejects destinations *written* more than once.
             continue
         if dest in first:
             issues.append(dict(base, code="TP_DUPLICATE",
