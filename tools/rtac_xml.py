@@ -288,9 +288,10 @@ _TP_CONTROL = re.compile(r"^\s*(IF\b|ELSIF\b|ELSE\b|END_IF\b|CASE\b|END_CASE\b|F
 def check_tag_processor(export_dir):
     """
     Tag Processor rows that AcSELerator reports as Setting Errors (the CODESYS
-    build doesn't see these): control-flow rows ("Code not generated for
-    statement") and destinations written by more than one built row
-    ("Duplicate Tag name"). Returns compile-style issues.
+    build doesn't see these): destinations written by more than one built row
+    ("Duplicate Tag name", error) and control-flow rows (warning; AcSELerator
+    reports "Code not generated for statement" when they wrap duplicates).
+    Returns compile-style issues.
     """
     path = os.path.join(device_folder(export_dir), "Tag Processor.xml")
     if not os.path.exists(path):
@@ -304,8 +305,11 @@ def check_tag_processor(export_dir):
         dest, src, order = cols.get("DestinationTagName", ""), cols.get("SourceExpression", ""), cols.get("SolveOrder")
         base = {"severity": "error", "object": "Tag Processor", "source": "tag_processor", "solve_order": order}
         if not dest and _TP_CONTROL.match(src):
-            issues.append(dict(base, code="TP_CONTROL",
-                               message="Control statement row '%s' is not supported: Code not generated for statement" % src.strip()))
+            # Not an error by itself: AcSELerator reported "Code not generated for
+            # statement" on these only alongside duplicate destinations inside them.
+            issues.append(dict(base, severity="warning", code="TP_CONTROL",
+                               message="Control statement row '%s': verify the Tag Processor accepts it; "
+                                       "destinations inside IF/ELSE branches count as duplicates" % src.strip()))
             continue
         if not dest or dest.startswith("//"):
             continue
