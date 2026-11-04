@@ -280,3 +280,38 @@ def list_tags(export_dir):
                 elif cols.get("DestinationTagName") and cols.get("DTDataType"):
                     tags[cols["DestinationTagName"]] = cols["DTDataType"]
     return tags
+
+
+_TP_CONTROL = re.compile(r"^\s*(IF\b|ELSIF\b|ELSE\b|END_IF\b|CASE\b|END_CASE\b|FOR\b|END_FOR\b|WHILE\b|END_WHILE\b)", re.I)
+
+
+def check_tag_processor(export_dir):
+    """
+    Tag Processor rows that AcSELerator reports as Setting Errors (the CODESYS
+    build doesn't see these): control-flow rows ("Code not generated for
+    statement") and destinations written by more than one built row
+    ("Duplicate Tag name"). Returns compile-style issues.
+    """
+    path = os.path.join(device_folder(export_dir), "Tag Processor.xml")
+    if not os.path.exists(path):
+        return []
+    root = ET.fromstring(_read(path))
+    issues, first = [], {}
+    for row in root.iter("Row"):
+        cols = {s.findtext("Column"): (s.findtext("Value") or "") for s in row.findall("Setting")}
+        if cols.get("Build") != "True":
+            continue
+        dest, src, order = cols.get("DestinationTagName", ""), cols.get("SourceExpression", ""), cols.get("SolveOrder")
+        base = {"severity": "error", "object": "Tag Processor", "source": "tag_processor", "solve_order": order}
+        if not dest and _TP_CONTROL.match(src):
+            issues.append(dict(base, code="TP_CONTROL",
+                               message="Control statement row '%s' is not supported: Code not generated for statement" % src.strip()))
+            continue
+        if not dest or dest.startswith("//"):
+            continue
+        if dest in first:
+            issues.append(dict(base, code="TP_DUPLICATE",
+                               message="Duplicate Tag name '%s' (also written at solve order %s)" % (dest, first[dest])))
+        else:
+            first[dest] = order
+    return issues
