@@ -161,4 +161,18 @@ def run_export(export_dir, extra_objects=(), extra_programs=(), run=None, timeou
 
 
 def compile_export(export_dir, timeout=900):
-    return run_export(export_dir, timeout=timeout)[0]
+    result = run_export(export_dir, timeout=timeout)[0]
+    if "issues" not in result:
+        return result
+    # The CODESYS build only covers POUs; also check the Tag Processor for the
+    # rows AcSELerator reports as Setting Errors.
+    tp = rtac_xml.check_tag_processor(export_dir)
+    if tp:
+        result["issues"] = tp + result["issues"]
+        errors = [i for i in result["issues"] if i["severity"] == "error"]
+        result["error_count"] = len(errors)
+        result["warning_count"] = len(result["issues"]) - len(errors)
+        result["ok"] = result["ok"] and not any(i["severity"] == "error" for i in tp)
+        result["note"] += (" Issues with source 'tag_processor' are AcSELerator Setting Errors in the "
+                           "Tag Processor (not checked by CODESYS).")
+    return result
