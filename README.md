@@ -137,3 +137,7 @@ The `rtac_*` tools run against a background RTAC process (alias `rtacmcp`), whic
 - `assign_program_to_task` only appends to tasks that already have an explicit POU list. On a default-order task it changes nothing: a one-item list made RTAC move the devices and the Tag Processor to the end of the execution order on import. It appears that default-order tasks schedule programs automatically, but that hasn't been confirmed in the GUI.
 - Stubs are approximate (see above). Functions that nothing calls are still not compiled.
 - Tested against AcSELerator RTAC 1.157 (RTAC 3530 R146, 3350 R157) and CODESYS 3.5 SP22 Patch 4.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
