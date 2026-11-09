@@ -75,6 +75,19 @@ The export/edit/compile tools work on a folder and don't need AcSELerator runnin
 - Deletes are refused for any project that doesn't start with that prefix.
 - There are no device tools (connect, send, firmware); nothing in this server talks to an RTAC.
 
+## Requirements
+
+You only need the parts used by the tools you plan to run:
+
+| Requirement | Needed for | Notes |
+|---|---|---|
+| Windows | everything | AcSELerator and CODESYS are Windows-only |
+| Python 3.10+ | everything | the `mcp` package needs 3.10 or newer; tested on 3.15 |
+| **AcSELerator RTAC** (with `AcRtacCmd.exe`) and access to an AcRTAC database (username and password) | `rtac_*` tools (list, export, import, delete) | Tested on 1.157. Not needed if you already have an exported XML folder |
+| **CODESYS 3.5 SP22** (standalone IDE, from the CODESYS Store) with the `CODESYS Control Win V3 x64` device and the `Standard` library installed | `compile_logic`, `run_unit_tests` | Tested on SP22 Patch 4. This is separate from the CODESYS 3.5.10 embedded in AcSELerator, whose script engine can't be driven headless. Other versions should work if `CODESYS_PATH`, `CODESYS_PROFILE` and `CODESYS_STANDARD_LIBRARY` are set to match |
+
+`run_unit_tests` uses the CODESYS simulator, so it doesn't need a soft-PLC runtime license.
+
 ## Setup
 
 ```powershell
