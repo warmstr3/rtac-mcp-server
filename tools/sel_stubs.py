@@ -62,6 +62,15 @@ END_TYPE
 STRUCT
 	EN : BOOL;
 	Offline : BOOL;
+	// Modbus client output pins (from a SEL-5033 Modbus TCP client export)
+	Message_Timeout : BOOL;
+	Message_Failure : BOOL;
+	Illegal_Function_Exception : BOOL;
+	Illegal_Data_Address_Exception : BOOL;
+	Illegal_Data_Value_Exception : BOOL;
+	Server_Device_Failure_Exception : BOOL;
+	Server_Device_Busy_Exception : BOOL;
+	Other_Exception : BOOL;
 END_STRUCT
 END_TYPE
 """),
@@ -93,6 +102,15 @@ CDC_TYPES = [
     _cdc("operSPC", ["ctlVal : BOOL"]),
     _cdc("operDPC", ["ctlVal : BOOL"]),
     _cdc("operAPC", ["setMag : REAL", "trigger : BOOL"]),
+    _cdc("operINC", ["ctlVal : DINT", "trigger : BOOL"]),
+    # Modbus holding-register tags: Tag Type INC with .status (INS) and .oper (operINC) rows.
+    ("INC", """TYPE INC :
+STRUCT
+	status : INS;
+	oper : operINC;
+END_STRUCT
+END_TYPE
+"""),
     ("SPC", """TYPE SPC :
 STRUCT
 	status : SPS;
